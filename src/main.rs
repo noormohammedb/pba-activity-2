@@ -41,10 +41,17 @@ fn main() {
 
     // println!("pad: {:?}", saved_pad_result);
     // println!("unpad: {:?}", unpad_result);
-    let x = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+    /*
+     * CBC Decrypt Test
+     */
+    let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
     let key = b"somekeyofsize123";
-    let result = cbc_encrypt(x, *key);
-    println!("{:?}", result);
+    let encrypted_result = cbc_encrypt(input.clone(), *key);
+    println!("Encrypted Result: {:?}", encrypted_result);
+    let decrypted_result = cbc_decrypt(encrypted_result, *key);
+    println!("Decrypted Result: {:?}", decrypted_result);
+    assert_eq!(&input, &decrypted_result);
 }
 
 /// Simple AES encryption
@@ -113,7 +120,6 @@ fn group(data: Vec<u8>) -> Vec<[u8; BLOCK_SIZE]> {
 
         i += BLOCK_SIZE;
     }
-
     blocks
 }
 
@@ -163,7 +169,7 @@ fn ecb_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     Vec::from(b"Hello")
 }
 
-fn initialize_block() -> [u8; BLOCK_SIZE] {
+fn initialize_random_vector() -> [u8; BLOCK_SIZE] {
     let mut rng = rand::thread_rng();
     let mut arr: [u8; BLOCK_SIZE] = [0; BLOCK_SIZE];
     for i in 0..BLOCK_SIZE {
@@ -172,7 +178,7 @@ fn initialize_block() -> [u8; BLOCK_SIZE] {
     arr
 }
 
-fn xor_arrays(arr1: [u8; BLOCK_SIZE], arr2: [u8; BLOCK_SIZE]) -> [u8; BLOCK_SIZE] {
+fn xor(arr1: [u8; BLOCK_SIZE], arr2: [u8; BLOCK_SIZE]) -> [u8; BLOCK_SIZE] {
     let mut result: [u8; 16] = [0u8; BLOCK_SIZE];
     for i in 0..BLOCK_SIZE {
         result[i] = arr1[i] ^ arr2[i];
@@ -195,26 +201,50 @@ fn xor_arrays(arr1: [u8; BLOCK_SIZE], arr2: [u8; BLOCK_SIZE]) -> [u8; BLOCK_SIZE
 fn cbc_encrypt(plain_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     // Remember to generate a random initialization vector for the first block.
 
-    let mut cyphers = Vec::new();
+    let mut cipher_text = Vec::new();
+    // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+    // [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16]
+
     let blocks = group(pad(plain_text));
 
-    let initial_vector = initialize_block();
+    let initial_vector = initialize_random_vector();
+
     let mut i: usize = 0;
     let mut xor_input = initial_vector;
 
     while i < blocks.len() {
         let block = blocks[i];
-        let result_xor = xor_arrays(xor_input, block);
-        let cypher_out = aes_encrypt(result_xor, &key);
-        cyphers.extend_from_slice(&cypher_out);
-        xor_input = cypher_out;
+        let result_xor = xor(xor_input, block);
+        let cipher_out = aes_encrypt(result_xor, &key);
+        cipher_text.extend_from_slice(&cipher_out);
+        xor_input = cipher_out;
         i += 1;
     }
-    cyphers
+    let mut output_cipher_text = initial_vector.to_vec();
+    output_cipher_text.extend_from_slice(&cipher_text);
+    output_cipher_text
 }
 
 fn cbc_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
-    todo!()
+    let cipher_blocks = group(cipher_text);
+
+    let mut plain_text = Vec::new();
+    let mut i = cipher_blocks.len() - 1;
+
+    while i >= 1 {
+        let cipher_block = cipher_blocks[i];
+        let next_cipher_block = cipher_blocks[i - 1];
+        let decrypted_result = aes_decrypt(cipher_block, &key);
+        let plain_text_chunk = xor(decrypted_result, next_cipher_block);
+        plain_text.push(plain_text_chunk);
+        // append plain_text chunk to arr
+
+        i -= 1;
+    }
+    plain_text.reverse(); // bc we appended from the end
+
+    un_pad(un_group(plain_text))
 }
 
 /// Another mode which you can implement on your own is counter mode.
