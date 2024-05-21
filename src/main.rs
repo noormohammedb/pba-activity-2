@@ -273,7 +273,7 @@ fn ctr_encrypt(plain_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
         let encrypted_counter = aes_encrypt(counter_block, &key);
 
         // XOR the encrypted counter with the corresponding !plain text block
-        let encrypted_block: [u8; BLOCK_SIZE] = xor_arrays(encrypted_counter, *block);
+        let encrypted_block: [u8; BLOCK_SIZE] = xor(encrypted_counter, *block);
 
         encrypted_blocks.push(encrypted_block);
     }
@@ -342,6 +342,7 @@ mod tests {
         assert_eq!(decrypted_text, plain_text);
     }
 
+    #[test]
     fn test_cbc_encrypt_decrypt() {
         let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
 
