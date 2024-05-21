@@ -41,17 +41,6 @@ fn main() {
 
     // println!("pad: {:?}", saved_pad_result);
     // println!("unpad: {:?}", unpad_result);
-
-    /*
-     * CBC Decrypt Test
-     */
-    let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-    let key = b"somekeyofsize123";
-    let encrypted_result = cbc_encrypt(input.clone(), *key);
-    println!("Encrypted Result: {:?}", encrypted_result);
-    let decrypted_result = cbc_decrypt(encrypted_result, *key);
-    println!("Decrypted Result: {:?}", decrypted_result);
-    assert_eq!(&input, &decrypted_result);
 }
 
 /// Simple AES encryption
@@ -263,11 +252,107 @@ fn cbc_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
 ///
 /// Once again, you will need to generate a random nonce which is 64 bits long. This should be
 /// inserted as the first block of the ciphertext.
+
 fn ctr_encrypt(plain_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
-    // Remember to generate a random nonce
-    todo!()
+    // Generate random 8 byte nonce
+    let mut rng = rand::thread_rng();
+    let nonce: [u8; 8] = rng.gen();
+    // split plain text into 16 bytes blocks
+    let blocks = group(pad(plain_text));
+
+    // for each block concatenate once with counter value that starts with 0 and increments for each block
+    let mut encrypted_blocks = Vec::new();
+
+    for (i, block) in blocks.iter().enumerate() {
+        // construct the counter value (nonce | counter)
+        let mut counter_block = [0u8; BLOCK_SIZE];
+        counter_block[..8].copy_from_slice(&nonce);
+        counter_block[8..].copy_from_slice(&(i as u64).to_be_bytes());
+
+        // encrypt the constructed value (nonce | counter) using AES encryption
+        let encrypted_counter = aes_encrypt(counter_block, &key);
+
+        // XOR the encrypted counter with the corresponding !plain text block
+        let encrypted_block: [u8; BLOCK_SIZE] = xor_arrays(encrypted_counter, *block);
+
+        encrypted_blocks.push(encrypted_block);
+    }
+
+    // concatenate the encrypted blocks and prepend the nonce
+    let mut cipher_text = nonce.to_vec();
+    cipher_text.extend_from_slice(&un_group(encrypted_blocks));
+    cipher_text
 }
 
 fn ctr_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
-    todo!()
+    // extract the nonce (first 8 bytes)
+    let nonce: [u8; 8] = cipher_text[..8].try_into().unwrap();
+
+    // split the ciphertext into 16 bytes blocks (excluding the nonce)
+    let blocks = group(cipher_text[8..].to_vec());
+
+    // decrypt each block using the counter mode
+    let mut decrypted_blocks = Vec::new();
+
+    // for each block
+    for (i, block) in blocks.iter().enumerate() {
+        // construct the counter value (nonce | counter)
+        let mut counter_block = [0u8; BLOCK_SIZE];
+        counter_block[..8].copy_from_slice(&nonce);
+        counter_block[8..].copy_from_slice(&(i as u64).to_be_bytes());
+
+        // encrypt the counter using AES (both encryption and decryption involve encrypting the counter)
+        let encrypted_counter = aes_encrypt(counter_block, &key);
+
+        // xor encrypter counter with the !ciphertext blocks
+        let decrypted_block: [u8; BLOCK_SIZE] = xor(encrypted_counter, *block);
+
+        decrypted_blocks.push(decrypted_block);
+    }
+
+    //concatenate decrypted blocks
+    let decrypted_data = un_group(decrypted_blocks);
+
+    //return unpadded crypted data
+    un_pad(decrypted_data)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_ctr_encrypt_decrypt() {
+        // define key for encryption/decryption
+        let key = [0x00; BLOCK_SIZE]; // array of 16 bytes
+
+        // define a plain text message to be encrypted
+        let plain_text = b"Hello, AES in CTR mode! This is a test.".to_vec();
+
+        // encrypt plain text using CTR mode
+        let encrypted_text = ctr_encrypt(plain_text.clone(), key);
+
+        // check that the encrypted text is different from the plain text
+        assert_ne!(encrypted_text, plain_text);
+
+        // decrypt the encrypted text using CTR mode
+        let decrypted_text = ctr_decrypt(encrypted_text, key);
+
+        // check that the decrypted text matches the original plain text
+        assert_eq!(decrypted_text, plain_text);
+    }
+
+    fn test_cbc_encrypt_decrypt() {
+        let input = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+
+        let key = b"somekeyofsize123";
+
+        let encrypted_result = cbc_encrypt(input.clone(), *key);
+
+        let decrypted_result = cbc_decrypt(encrypted_result, *key);
+
+        println!("Decrypted Result: {:?}", decrypted_result);
+
+        assert_eq!(&input, &decrypted_result);
+    }
 }
