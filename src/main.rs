@@ -143,7 +143,18 @@ type Aes128Ecb = Ecb<Aes128, Pkcs7>;
 /// One good thing about this mode is that it is parallelizable. But to see why it is
 /// insecure look at: https://www.ubiqsecurity.com/wp-content/uploads/2022/02/ECB2.png
 fn ecb_encrypt(plain_text: Vec<u8>, key: [u8; 16]) -> Vec<u8> {
-    Vec::from(b"test")
+    let blocks = group(pad(plain_text));
+
+    let mut cipher_blocks = Vec::new();
+
+    for block in blocks {
+        let encrypted_block = aes_encrypt(block, &key);
+        cipher_blocks.push(encrypted_block)
+    }
+    cipher_blocks
+        .iter()
+        .flat_map(|block| block.clone())
+        .collect::<Vec<u8>>()
 }
 
 /// Opposite of ecb_encrypt.
@@ -155,7 +166,20 @@ fn ecb_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     // let decrypted_text = cipher.decrypt_vec(&cipher_text).unwrap();
     //
     // decrypted_text
-    Vec::from(b"Hello")
+
+    let mut plain_text_blocks = Vec::new();
+
+    let padded_cipher_blocks = group(cipher_text);
+
+    for block in padded_cipher_blocks {
+        let decrypted_block = aes_decrypt(block, &key);
+        plain_text_blocks.push(decrypted_block);
+    }
+
+    let plain_groups_paded = un_group(plain_text_blocks);
+    let plain_text = un_pad(plain_groups_paded);
+
+    plain_text
 }
 
 fn initialize_random_vector() -> [u8; BLOCK_SIZE] {
@@ -320,6 +344,37 @@ fn ctr_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_ecb_encrypt() {
+        let plain_text = "foo bar koo".as_bytes().to_vec();
+        let my_key = [
+            00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15,
+        ];
+
+        let encrypted_data = ecb_encrypt(plain_text.clone(), my_key);
+
+        assert_ne!(encrypted_data, plain_text);
+
+        let decrypted_data = ecb_decrypt(encrypted_data, my_key);
+
+        assert_eq!(decrypted_data, plain_text);
+    }
+
+    #[test]
+    fn test_ecb_decrypt() {
+        let plain_text = "lorem ipsum".as_bytes().to_vec();
+
+        let my_key = [
+            00, 01, 02, 03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15,
+        ];
+
+        let encrypted_data = ecb_encrypt(plain_text.clone(), my_key);
+
+        let decrypted_data = ecb_decrypt(encrypted_data, my_key);
+
+        assert_eq!(decrypted_data, plain_text);
+    }
 
     #[test]
     fn test_ctr_encrypt_decrypt() {
