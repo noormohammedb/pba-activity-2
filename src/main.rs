@@ -17,6 +17,7 @@ use aes::{
 };
 use block_modes::block_padding::Pkcs7;
 use block_modes::{BlockMode, Ecb};
+use rand::Rng;
 use std::convert::TryInto;
 use std::str::from_utf8;
 
@@ -25,21 +26,25 @@ const BLOCK_SIZE: usize = 16;
 
 fn main() {
     // todo!("Maybe this should be a library crate. TBD");
-    let plain_text = *b"Hello world!    ";
-    println!("Plaintext: {:?}", plain_text);
-    let key = b"an example key 1";
-    let cipher_text = aes_encrypt(plain_text, key); // Replace with actual encrypted data;
+    // let plain_text = *b"Hello world!    ";
+    // println!("Plaintext: {:?}", plain_text);
+    // let key = b"an example key 1";
+    // let cipher_text = aes_encrypt(plain_text, key); // Replace with actual encrypted data;
 
-    let decrypted = aes_decrypt(cipher_text, key);
+    // let decrypted = aes_decrypt(cipher_text, key);
 
-    println!("Decrypted: {:?}", decrypted);
+    // println!("Decrypted: {:?}", decrypted);
+    // let x = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
+    // let pad_result = group(pad(x));
+    // let saved_pad_result = pad_result.clone();
+    // let unpad_result = un_pad(un_group(pad_result));
+
+    // println!("pad: {:?}", saved_pad_result);
+    // println!("unpad: {:?}", unpad_result);
     let x = vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
-    let pad_result = group(pad(x));
-    let saved_pad_result = pad_result.clone();
-    let unpad_result = un_pad(un_group(pad_result));
-
-    println!("pad: {:?}", saved_pad_result);
-    println!("unpad: {:?}", unpad_result);
+    let key = b"somekeyofsize123";
+    let result = cbc_encrypt(x, *key);
+    println!("{:?}", result);
 }
 
 /// Simple AES encryption
@@ -158,6 +163,23 @@ fn ecb_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     Vec::from(b"Hello")
 }
 
+fn initialize_block() -> [u8; BLOCK_SIZE] {
+    let mut rng = rand::thread_rng();
+    let mut arr: [u8; BLOCK_SIZE] = [0; BLOCK_SIZE];
+    for i in 0..BLOCK_SIZE {
+        arr[i] = rng.gen();
+    }
+    arr
+}
+
+fn xor_arrays(arr1: [u8; BLOCK_SIZE], arr2: [u8; BLOCK_SIZE]) -> [u8; BLOCK_SIZE] {
+    let mut result: [u8; 16] = [0u8; BLOCK_SIZE];
+    for i in 0..BLOCK_SIZE {
+        result[i] = arr1[i] ^ arr2[i];
+    }
+    result
+}
+
 /// The next mode, which you can implement on your own is cipherblock chaining.
 /// This mode actually is secure, and it often used in real world applications.
 ///
@@ -173,7 +195,22 @@ fn ecb_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
 fn cbc_encrypt(plain_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
     // Remember to generate a random initialization vector for the first block.
 
-    todo!()
+    let mut cyphers = Vec::new();
+    let blocks = group(pad(plain_text));
+
+    let initial_vector = initialize_block();
+    let mut i: usize = 0;
+    let mut xor_input = initial_vector;
+
+    while i < blocks.len() {
+        let block = blocks[i];
+        let result_xor = xor_arrays(xor_input, block);
+        let cypher_out = aes_encrypt(result_xor, &key);
+        cyphers.extend_from_slice(&cypher_out);
+        xor_input = cypher_out;
+        i += 1;
+    }
+    cyphers
 }
 
 fn cbc_decrypt(cipher_text: Vec<u8>, key: [u8; BLOCK_SIZE]) -> Vec<u8> {
